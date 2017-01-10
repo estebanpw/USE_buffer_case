@@ -1,0 +1,40 @@
+!create prod_1 : Producer
+!create prod_2 : Producer
+
+!create buffer : Buffer
+
+!insert (prod_1, buffer) into Send_petitions
+!insert (prod_2, buffer) into Send_petitions
+
+!prod_1.start()
+!prod_2.start()
+
+!buffer.start()
+
+
+!create consu_1 : Consumer
+!create consu_2 : Consumer
+!create consu_3 : Consumer
+
+!insert (consu_1, buffer) into Consume
+!insert (consu_2, buffer) into Consume
+!insert (consu_3, buffer) into Consume
+
+
+!prod_1.produce()
+!prod_1.produce()
+!prod_1.produce()
+!prod_2.produce()
+!prod_2.produce()
+!prod_2.produce()
+
+
+
+!consu_1.consumePetition()
+!consu_3.consumePetition()
+!consu_1.consumePetition()
+!consu_2.consumePetition()
+!consu_2.consumePetition()
+!consu_3.consumePetition()
+
+

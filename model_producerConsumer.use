@@ -1,0 +1,158 @@
+model producerConsumer
+
+enum Petition_type {HIGH, MEDIUM, LOW}
+
+class Producer
+	attributes
+		shuffler:Integer
+	operations
+
+		start()
+			begin
+				self.shuffler := 0;
+			end
+
+		produce()
+			begin
+				declare p1:Petition;
+				p1:=self.generatePetition();
+				self.store_petitions.put(p1);
+			end
+		generatePetition():Petition
+			begin
+				self.shuffler := self.shuffler + 1;
+				result := new Petition;
+				if self.shuffler.mod(3) = 0 then result.data := 'multiple of 3'; result.priority := Petition_type::HIGH; 
+				else if self.shuffler.mod(2) = 0 then result.data := 'multiple of 2'; result.priority := Petition_type::MEDIUM;
+				else result.data := 'not multiple of 2 or 3'; result.priority := Petition_type::LOW; end end
+			end
+			pre notZero: 				(self.shuffler >= 0)
+			post elementWasGenerated: 	(self.shuffler > self.shuffler@pre)
+			post notNullPetition:		(not result.isUndefined())
+end
+
+
+
+class Buffer
+	attributes
+		low_priority_queue		: Sequence(Petition)
+		medium_priority_queue	: Sequence(Petition)
+		high_priority_queue		: Sequence(Petition)
+	operations
+
+		start()
+			begin
+				self.low_priority_queue := Sequence{};
+				self.medium_priority_queue := Sequence{};
+				self.high_priority_queue := Sequence{};
+			end
+
+		put(p:Petition)
+			begin
+				if p.priority = Petition_type::LOW then self.low_priority_queue := self.low_priority_queue->append(p)
+				else if p.priority = Petition_type::MEDIUM then self.medium_priority_queue := self.medium_priority_queue->append(p)
+				else self.high_priority_queue := self.high_priority_queue->append(p) end end
+			end
+			pre notReceiveNullPetition: (not p.isUndefined())
+			post wasInserted: 			((self.low_priority_queue->size + self.medium_priority_queue->size + self.high_priority_queue->size) > (self.low_priority_queue@pre->size + self.medium_priority_queue@pre->size + self.high_priority_queue@pre->size))
+
+		getPetitionsByPriority():Petition
+			begin
+				if self.high_priority_queue->size > 0 then result := self.getHigh(); self.redeclareQueueHigh();
+				else if self.medium_priority_queue-> size > 0 then result := self.getMedium(); self.redeclareQueueMedium();
+				else result := self.getLow(); self.redeclareQueueLow(); end end
+			end
+			post noNullSequence:		(not self.low_priority_queue->isUndefined() and not self.medium_priority_queue->isUndefined() and not self.high_priority_queue->isUndefined())
+			post notNegativeSize:		(self.low_priority_queue->size >= 0 and self.medium_priority_queue->size >= 0 and self.high_priority_queue->size >= 0)
+			post highPriorityComesFirst:	((self.high_priority_queue@pre->size = 0) or (self.high_priority_queue@pre->size > self.high_priority_queue->size))
+
+
+		getHigh():Petition
+			begin
+				result := self.high_priority_queue->first();
+				self.high_priority_queue := self.high_priority_queue->subSequence(2, self.high_priority_queue->size);
+			end
+			post noNullResultAtHigh:			(not result.isUndefined())
+		getMedium():Petition
+			begin
+				result := self.medium_priority_queue->first(); 
+				self.medium_priority_queue := self.medium_priority_queue->subSequence(2, self.medium_priority_queue->size);
+			end
+			post noNullResultAtMedium:			(not result.isUndefined())
+		getLow():Petition
+			begin
+				result := self.low_priority_queue->first(); 
+				self.low_priority_queue := self.low_priority_queue->subSequence(2, self.low_priority_queue->size);
+			end
+			post noNullResultAtLow:			(not result.isUndefined())
+		redeclareQueueHigh()
+			begin
+				if self.high_priority_queue->isUndefined() then self.high_priority_queue := Sequence{} end
+			end 
+		redeclareQueueMedium()
+			begin
+				if self.medium_priority_queue->isUndefined() then self.medium_priority_queue := Sequence{} end
+			end 
+		redeclareQueueLow()
+			begin
+				if self.low_priority_queue->isUndefined() then self.low_priority_queue := Sequence{} end
+			end 
+
+
+	statemachines
+		psm Buffer
+			states
+				s: initial 
+				Initialized
+				Empty
+				Normal   
+			transitions
+				s -> Initialized
+				Initialized -> Empty { start() }
+				Empty -> Normal { [self.low_priority_queue->size = 0 and self.medium_priority_queue->size = 0 and self.high_priority_queue->size = 0] put() }
+				Normal -> Normal { [self.low_priority_queue->size > 0 or self.medium_priority_queue->size > 0 or self.high_priority_queue->size > 0] put() }
+				Normal -> Normal { [self.low_priority_queue->size > 0 or self.medium_priority_queue->size > 0 or self.high_priority_queue->size > 0] getPetitionsByPriority() }
+				Normal -> Empty { [self.low_priority_queue->size = 0 and self.medium_priority_queue->size = 0 and self.high_priority_queue->size = 0] getPetitionsByPriority() }
+	end
+end
+
+
+class Consumer
+	operations
+		consumePetition()
+			begin
+				declare p1:Petition; 
+				p1 := self.consume_from_buffer.getPetitionsByPriority();
+				if not p1.isUndefined() then destroy p1 end
+			end
+end
+
+-- Data types
+
+class Petition
+	attributes
+		data:String
+		priority:Petition_type
+end
+
+
+-- Associations
+
+aggregation Content between
+	Buffer [1] role buffer
+	Petition [*] role petition 
+end
+
+association Send_petitions between
+	Producer [1..*] role produce_petitions
+	Buffer [1] role store_petitions
+end
+
+association Consume between
+	Consumer [1..*] role send_to_consumer
+	Buffer [1] role consume_from_buffer
+end
+
+  
+
+
